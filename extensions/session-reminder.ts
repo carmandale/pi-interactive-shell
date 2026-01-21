@@ -50,6 +50,7 @@ interface ActiveSession {
   startedAt: number;
   lastRemindedAt: number;
   status: string;
+  reminderCount: number;
 }
 
 export default function sessionReminderExtension(pi: ExtensionAPI) {
@@ -62,32 +63,53 @@ export default function sessionReminderExtension(pi: ExtensionAPI) {
   const activeSessions = new Map<string, ActiveSession>();
   let reminderInterval: ReturnType<typeof setInterval> | null = null;
 
+  const MAX_REMINDERS = 10; // Stop after 10 reminders
+  const MAX_SESSION_AGE_MS = 10 * 60 * 1000; // 10 minutes max tracking
+
   function checkAndRemind() {
     const now = Date.now();
     
     for (const [sessionId, session] of activeSessions) {
       // Only remind for running sessions
-      if (session.status !== "running") continue;
+      if (session.status !== "running") {
+        activeSessions.delete(sessionId);
+        continue;
+      }
+      
+      // Auto-cleanup old sessions (likely stale)
+      const sessionAge = now - session.startedAt;
+      if (sessionAge > MAX_SESSION_AGE_MS) {
+        activeSessions.delete(sessionId);
+        continue;
+      }
+      
+      // Stop after max reminders (agent is clearly ignoring us)
+      if (session.reminderCount >= MAX_REMINDERS) {
+        activeSessions.delete(sessionId);
+        continue;
+      }
       
       const timeSinceLastReminder = now - session.lastRemindedAt;
       
       if (timeSinceLastReminder >= config.reminderIntervalMs) {
         const runtime = Math.round((now - session.startedAt) / 1000);
         
+        session.reminderCount++;
+        
         pi.sendMessage({
           customType: "session-reminder",
-          content: `⏰ REMINDER: You have an active hands-free session!
+          content: `⏰ REMINDER (${session.reminderCount}/${MAX_REMINDERS}): You have an active hands-free session!
 
 Session: ${sessionId}
 Command: ${session.command}
 Runtime: ${runtime}s
 
-You should check on it:
+Check on it NOW:
 \`\`\`typescript
 interactive_shell({ sessionId: "${sessionId}" })
 \`\`\`
 
-If the task looks complete, kill it:
+Or kill it if done:
 \`\`\`typescript
 interactive_shell({ sessionId: "${sessionId}", kill: true })
 \`\`\``,
@@ -96,6 +118,7 @@ interactive_shell({ sessionId: "${sessionId}", kill: true })
             sessionId, 
             runtime,
             reminderType: "periodic",
+            reminderCount: session.reminderCount,
           },
         }, {
           deliverAs: "followUp",  // Wait for current work, don't interrupt mid-task
@@ -144,6 +167,7 @@ interactive_shell({ sessionId: "${sessionId}", kill: true })
         startedAt: now,
         lastRemindedAt: now, // Don't remind immediately
         status: "running",
+        reminderCount: 0,
       });
     }
     
@@ -156,10 +180,17 @@ interactive_shell({ sessionId: "${sessionId}", kill: true })
         session.status = status;
       }
       
-      // Remove if terminal state
-      if (status === "killed" || status === "exited" || status === "backgrounded") {
+      // Remove if terminal state (killed, exited, backgrounded, user-takeover)
+      // user-takeover means user is driving - no need to remind
+      if (status === "killed" || status === "exited" || status === "backgrounded" || status === "user-takeover") {
         activeSessions.delete(sessionId);
       }
+    }
+    
+    // Also remove if we see any result without "running" status for a tracked session
+    // This catches edge cases where session ended but we missed the exact status
+    else if (status && status !== "running") {
+      activeSessions.delete(sessionId);
     }
   });
 
