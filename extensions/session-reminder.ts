@@ -27,7 +27,7 @@ interface Config {
 }
 
 const DEFAULT_CONFIG: Config = {
-  reminderIntervalMs: 30000, // 30 seconds
+  reminderIntervalMs: 15000, // 15 seconds
   enabled: true,
 };
 
