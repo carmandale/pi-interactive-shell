@@ -13,6 +13,8 @@
     "pty-session.ts",
     "session-manager.ts",
     "scripts/",
+    "extensions/",
+    "docs/",
     "README.md",
     "SKILL.md",
     "CHANGELOG.md"
