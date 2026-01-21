@@ -7,6 +7,47 @@ description: Cheat sheet + workflow for launching interactive coding-agent CLIs 
 
 Last verified: 2026-01-18
 
+## ⛔ CRITICAL RULES (READ THIS FIRST)
+
+**Three things you WILL mess up if you don't pay attention:**
+
+### 1. PROMPT GOES IN COMMAND, NOT REASON
+```typescript
+// ❌ WRONG - Agent sits idle forever (reason is UI-only!)
+interactive_shell({ command: 'pi', reason: 'Fix the bugs' })
+
+// ✅ RIGHT - Prompt embedded in command
+interactive_shell({ command: 'pi "Fix the bugs"', reason: 'Bug fixing' })
+```
+
+### 2. PRESS ENTER (ADD \n OR keys)
+```typescript
+// ❌ WRONG - Text appears, no enter pressed, agent stares at you
+interactive_shell({ sessionId: "x", input: "hello" })
+
+// ✅ RIGHT - Add \n
+interactive_shell({ sessionId: "x", input: "hello\n" })
+
+// ✅ RIGHT - Or use keys
+interactive_shell({ sessionId: "x", input: { text: "hello", keys: ["enter"] } })
+```
+
+### 3. HANDS-FREE = START → QUERY → KILL
+Hands-free returns **IMMEDIATELY**. You must query and kill!
+```typescript
+// 1. START - returns right away!
+interactive_shell({ command: 'pi "Do the thing"', mode: "hands-free" })
+// → { sessionId: "calm-reef" }
+
+// 2. QUERY (wait 30-60s between checks)
+interactive_shell({ sessionId: "calm-reef" })
+
+// 3. KILL when task looks done
+interactive_shell({ sessionId: "calm-reef", kill: true })
+```
+
+---
+
 ## Foreground vs Background Subagents
 
 Pi has two ways to delegate work to other AI coding agents:
