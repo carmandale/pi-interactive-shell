@@ -155,8 +155,15 @@ interactive_shell({ sessionId: "${sessionId}", kill: true })
     const sessionId = details?.sessionId as string | undefined;
     const status = details?.status as string | undefined;
     const command = details?.command as string | undefined;
+    const error = details?.error as string | undefined;
     
     if (!sessionId) return;
+    
+    // Session not found = remove from tracking immediately
+    if (error === "session_not_found" || event.isError) {
+      activeSessions.delete(sessionId);
+      return;
+    }
     
     // New session started
     if (status === "running" && command) {
@@ -169,28 +176,26 @@ interactive_shell({ sessionId: "${sessionId}", kill: true })
         status: "running",
         reminderCount: 0,
       });
+      return;
     }
     
-    // Session status update
-    else if (activeSessions.has(sessionId)) {
-      const session = activeSessions.get(sessionId)!;
-      
-      // Update status
-      if (status) {
-        session.status = status;
-      }
-      
-      // Remove if terminal state (killed, exited, backgrounded, user-takeover)
-      // user-takeover means user is driving - no need to remind
-      if (status === "killed" || status === "exited" || status === "backgrounded" || status === "user-takeover") {
-        activeSessions.delete(sessionId);
-      }
-    }
-    
-    // Also remove if we see any result without "running" status for a tracked session
-    // This catches edge cases where session ended but we missed the exact status
-    else if (status && status !== "running") {
+    // Terminal states - remove from tracking
+    // killed, exited, backgrounded, user-takeover all mean stop reminding
+    if (status === "killed" || status === "exited" || status === "backgrounded" || status === "user-takeover") {
       activeSessions.delete(sessionId);
+      return;
+    }
+    
+    // Any other non-running status for a tracked session = remove
+    if (status && status !== "running") {
+      activeSessions.delete(sessionId);
+      return;
+    }
+    
+    // Session still running - update last activity
+    if (activeSessions.has(sessionId) && status === "running") {
+      const session = activeSessions.get(sessionId)!;
+      session.status = status;
     }
   });
 
